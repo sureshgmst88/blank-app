@@ -75,15 +75,32 @@ if 'current_view' not in st.session_state:
 if 'selected_stock' not in st.session_state:
     st.session_state.selected_stock = 'ITC'
 
+# Portfolio Data with Today's Gain/Loss Metrics
 portfolio_data = {
-    'ITC': {'name': 'ITC Ltd', 'sym': 'ITC.NS', 'shares': 1850, 'atp': 308.21, 'ltp': 255.90, 'inv': 570197, 'val': 473415, 'pnl': -96773.49, 'pnl_pct': -16.97},
-    'DRREDDY': {'name': "Dr. Reddy's Lab", 'sym': 'DRREDDY.NS', 'shares': 1, 'atp': 1316.81, 'ltp': 1206.20, 'inv': 1316, 'val': 1206, 'pnl': -110.61, 'pnl_pct': -8.41},
-    'ITCHOTELS': {'name': 'ITC Hotels', 'sym': 'ITCHOTELS.NS', 'shares': 8, 'atp': 513.47, 'ltp': 158.51, 'inv': 4107, 'val': 1268, 'pnl': -2839.68, 'pnl_pct': -69.14},
-    'SAKUMA': {'name': 'Sakuma Exports', 'sym': 'SAKUMA.NS', 'shares': 100, 'atp': 7.80, 'ltp': 5.40, 'inv': 780, 'val': 540, 'pnl': -240.00, 'pnl_pct': -30.87}
+    'ITC': {
+        'name': 'ITC Ltd', 'sym': 'ITC.NS', 'shares': 1850, 'atp': 308.21, 'ltp': 255.90,
+        'inv': 570197, 'val': 473415, 'pnl': -96773.49, 'pnl_pct': -16.97,
+        'today_pnl': -12.50, 'today_pnl_pct': -0.01
+    },
+    'DRREDDY': {
+        'name': "Dr. Reddy's Lab", 'sym': 'DRREDDY.NS', 'shares': 1, 'atp': 1316.81, 'ltp': 1206.20,
+        'inv': 1316, 'val': 1206, 'pnl': -110.61, 'pnl_pct': -8.41,
+        'today_pnl': 15.40, 'today_pnl_pct': 1.29
+    },
+    'ITCHOTELS': {
+        'name': 'ITC Hotels', 'sym': 'ITCHOTELS.NS', 'shares': 8, 'atp': 513.47, 'ltp': 158.51,
+        'inv': 4107, 'val': 1268, 'pnl': -2839.68, 'pnl_pct': -69.14,
+        'today_pnl': -5.20, 'today_pnl_pct': -0.41
+    },
+    'SAKUMA': {
+        'name': 'Sakuma Exports', 'sym': 'SAKUMA.NS', 'shares': 100, 'atp': 7.80, 'ltp': 5.40,
+        'inv': 780, 'val': 540, 'pnl': -240.00, 'pnl_pct': -30.87,
+        'today_pnl': 20.00, 'today_pnl_pct': 3.85
+    }
 }
 
 # ========================================================
-# 1. SCREEN 1: PORTFOLIO SCREEN
+# 1. SCREEN 1: PORTFOLIO SCREEN WITH TODAY'S P&L
 # ========================================================
 if st.session_state.current_view == 'portfolio':
     st.markdown("""
@@ -100,6 +117,7 @@ if st.session_state.current_view == 'portfolio':
     <br>
     """, unsafe_allow_html=True)
 
+    # Top Wealth Card
     st.markdown("""
     <div class="overall-card">
         <div style="font-size: 24px; font-weight: bold;">₹16,02,788 👁️</div>
@@ -118,22 +136,28 @@ if st.session_state.current_view == 'portfolio':
     <div style="color:#788699; font-size:13px; margin-bottom:8px;">🔍 Search stocks by company</div>
     """, unsafe_allow_html=True)
 
+    # Stock List with Today's P&L Highlighted
     for key, item in portfolio_data.items():
         c_body, c_btn = st.columns([4, 1])
+        today_class = 'gain-green' if item['today_pnl'] >= 0 else 'loss-red'
+        today_sign = '+' if item['today_pnl'] >= 0 else ''
+        overall_class = 'gain-green' if item['pnl'] >= 0 else 'loss-red'
+        overall_sign = '+' if item['pnl'] >= 0 else ''
+
         with c_body:
             st.markdown(f"""
             <div class="angel-card">
-                <div style="display:flex; justify-content:space-between;">
-                    <div style="font-weight:bold; font-size:15px;">{key}</div>
-                    <div class="{'gain-green' if item['pnl']>=0 else 'loss-red'}">₹{item['pnl']:,.2f} ({item['pnl_pct']:.2f}%)</div>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div><b style="font-size:15px;">{key}</b> <span class="muted-text">({item['shares']} shares)</span></div>
+                    <div class="{overall_class}" style="font-size:14px;">{overall_sign}₹{item['pnl']:,.2f} ({overall_sign}{item['pnl_pct']:.2f}%)</div>
                 </div>
-                <div style="display:flex; justify-content:space-between; margin-top:3px;">
-                    <div class="muted-text">ATP ₹{item['atp']:.2f}</div>
-                    <div><span class="muted-text">LTP</span> <span class="bold-white">₹{item['ltp']:.2f}</span></div>
+                <div style="display:flex; justify-content:space-between; margin-top:5px;">
+                    <div class="muted-text">ATP: ₹{item['atp']:.2f} | Inv: ₹{item['inv']:,}</div>
+                    <div><span class="muted-text">LTP:</span> <b class="bold-white">₹{item['ltp']:.2f}</b></div>
                 </div>
-                <div style="display:flex; justify-content:space-between; margin-top:2px;">
-                    <div class="muted-text">Shares {item['shares']}</div>
-                    <div class="muted-text">Current ₹{item['val']:,}</div>
+                <div style="display:flex; justify-content:space-between; margin-top:4px; border-top:1px dashed #232c3d; padding-top:4px;">
+                    <div class="muted-text">Current: ₹{item['val']:,}</div>
+                    <div><span class="muted-text">Today's P&L:</span> <span class="{today_class}">{today_sign}₹{item['today_pnl']:,.2f} ({today_sign}{item['today_pnl_pct']:.2f}%)</span></div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -148,6 +172,8 @@ if st.session_state.current_view == 'portfolio':
 # ========================================================
 elif st.session_state.current_view == 'detail':
     stock = portfolio_data[st.session_state.selected_stock]
+    today_class = 'gain-green' if stock['today_pnl'] >= 0 else 'loss-red'
+    today_sign = '+' if stock['today_pnl'] >= 0 else ''
 
     top_c1, top_c2 = st.columns([1, 4])
     with top_c1:
@@ -162,8 +188,8 @@ elif st.session_state.current_view == 'detail':
                 <div class="muted-text">NSE</div>
             </div>
             <div style="text-align:right;">
-                <div style="font-size:18px; font-weight:bold; color:#eb5b62;">₹{stock['ltp']:.2f} ▼</div>
-                <div class="loss-red" style="font-size:12px;">-6.85 (-2.61%)</div>
+                <div style="font-size:18px; font-weight:bold; color:{'#00d09c' if stock['today_pnl']>=0 else '#eb5b62'};">₹{stock['ltp']:.2f}</div>
+                <div class="{today_class}" style="font-size:12px;">{today_sign}₹{stock['today_pnl']:.2f} ({today_sign}{stock['today_pnl_pct']:.2f}%)</div>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -177,8 +203,9 @@ elif st.session_state.current_view == 'detail':
 
     st.markdown(f"""
     <div class="angel-card">
-        <div class="muted-text">Overall Loss 👁️</div>
-        <div class="loss-red" style="font-size:22px;">₹{stock['pnl']:,.2f} ({stock['pnl_pct']:.2f}%)</div>
+        <div class="muted-text">Overall P&L 👁️️</div>
+        <div class="{'gain-green' if stock['pnl']>=0 else 'loss-red'}" style="font-size:22px;">₹{stock['pnl']:,.2f} ({stock['pnl_pct']:.2f}%)</div>
+        <div class="muted-text" style="margin-top:4px;">Today's P&L: <b class="{today_class}">{today_sign}₹{stock['today_pnl']:,.2f} ({today_sign}{stock['today_pnl_pct']:.2f}%)</b></div>
         <hr style="border-color:#232c3d; margin:10px 0;">
         <div style="display:grid; grid-template-columns: 1fr 1fr; row-gap:12px;">
             <div><span class="muted-text">Total Quantity</span><br><b>{stock['shares']}</b></div>
@@ -202,7 +229,7 @@ elif st.session_state.current_view == 'detail':
             st.toast("Sell Order Placed")
 
 # ========================================================
-# 3. SCREEN 3: ADVANCED YOUTUBE STYLE CHART TERMINAL
+# 3. SCREEN 3: PRO CHART TERMINAL WITH PATTERNS & TARGETS
 # ========================================================
 elif st.session_state.current_view == 'chart':
     stock = portfolio_data[st.session_state.selected_stock]
@@ -285,7 +312,7 @@ elif st.session_state.current_view == 'chart':
         str_label = "EXTREME RISK / EXHAUSTION"
         trend_line_color = "#d50000"
 
-    # Pattern Recognition (Evening Star / Triangle / Channel)
+    # Pattern Recognition
     c1, c2, c3 = df.iloc[-3], df.iloc[-2], df.iloc[-1]
     detected_pattern = "Consolidation / Channel Range"
     if c1['Close'] > c1['Open'] and abs(c2['Close'] - c2['Open']) < (c1['High'] - c1['Low']) * 0.3 and c3['Close'] < c3['Open']:
@@ -298,12 +325,10 @@ elif st.session_state.current_view == 'chart':
     is_downtrend = not df['ST_Dir'].iloc[-1]
     trend_state = "DOWNTREND" if is_downtrend else "UPTREND"
 
-    # Target & Stop Loss Calculation
     stop_loss = round(df['SuperTrend'].iloc[-1], 2)
     risk_diff = abs(curr_ltp - stop_loss)
     target = round(curr_ltp - (risk_diff * 1.5), 2) if is_downtrend else round(curr_ltp + (risk_diff * 1.5), 2)
 
-    # YouTube Style Achievement Check
     achieved = (curr_ltp <= target) if is_downtrend else (curr_ltp >= target)
     achieve_text = "🎉 TARGET ACHIEVED! (+1:1.5 RR)" if achieved else "⏳ RUNNING IN TARGET DIRECTION"
     achieve_bg = "#064e3b" if achieved else "#1a2230"
@@ -311,64 +336,45 @@ elif st.session_state.current_view == 'chart':
     # Plotly Subplot
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.02, row_heights=[0.75, 0.25])
 
-    # Candlestick
     fig.add_trace(go.Candlestick(
         x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'],
         name="Candles", increasing_line_color='#00d09c', decreasing_line_color='#eb5b62'
     ), row=1, col=1)
 
-    # 1. Parallel Channel / Flag Box (YouTube Flag Pattern)
+    # Parallel Channel Box
     x_start, x_end = df.index[-20], df.index[-1]
     fig.add_shape(type="rect",
         x0=x_start, y0=recent_low, x1=x_end, y1=recent_high,
         line=dict(color=trend_line_color, width=1.5, dash="dot"),
-        fillcolor=str_color, opacity=0.08,
-        row=1, col=1
+        fillcolor=str_color, opacity=0.08, row=1, col=1
     )
 
-    # 2. Risk-Reward Target Achievement Box (Green Target Zone / Red SL Zone)
-    target_box_top = max(curr_ltp, target)
-    target_box_bot = min(curr_ltp, target)
-    sl_box_top = max(curr_ltp, stop_loss)
-    sl_box_bot = min(curr_ltp, stop_loss)
-
-    # Green Target Box
+    # Target & Stop Loss Zones
     fig.add_shape(type="rect",
-        x0=df.index[-8], y0=target_box_bot, x1=df.index[-1], y1=target_box_top,
-        line=dict(color="#00d09c", width=1), fillcolor="#00d09c", opacity=0.2,
-        row=1, col=1
+        x0=df.index[-8], y0=min(curr_ltp, target), x1=df.index[-1], y1=max(curr_ltp, target),
+        line=dict(color="#00d09c", width=1), fillcolor="#00d09c", opacity=0.2, row=1, col=1
     )
-    # Red Stop Loss Box
     fig.add_shape(type="rect",
-        x0=df.index[-8], y0=sl_box_bot, x1=df.index[-1], y1=sl_box_top,
-        line=dict(color="#eb5b62", width=1), fillcolor="#eb5b62", opacity=0.2,
-        row=1, col=1
+        x0=df.index[-8], y0=min(curr_ltp, stop_loss), x1=df.index[-1], y1=max(curr_ltp, stop_loss),
+        line=dict(color="#eb5b62", width=1), fillcolor="#eb5b62", opacity=0.2, row=1, col=1
     )
 
-    # Target & Stop Loss Lines with Badges
     fig.add_hline(y=target, line_color="#00d09c", line_dash="dash", annotation_text=f"🎯 TARGET ₹{target}", row=1, col=1)
     fig.add_hline(y=stop_loss, line_color="#eb5b62", line_dash="dash", annotation_text=f"🛑 SL ₹{stop_loss}", row=1, col=1)
 
-    # SuperTrend Step Line
-    fig.add_trace(go.Scatter(
-        x=df.index, y=df['SuperTrend'], mode='lines',
-        line=dict(color='#eb5b62' if is_downtrend else '#00d09c', width=2),
-        name="SuperTrend"
-    ), row=1, col=1)
+    fig.add_trace(go.Scatter(x=df.index, y=df['SuperTrend'], mode='lines', line=dict(color='#eb5b62' if is_downtrend else '#00d09c', width=2), name="SuperTrend"), row=1, col=1)
 
-    # Volume Subplot
     colors_vol = ['#00d09c' if c >= o else '#eb5b62' for c, o in zip(df['Close'], df['Open'])]
     fig.add_trace(go.Bar(x=df.index, y=df['Volume'], marker_color=colors_vol, name="Volume"), row=2, col=1)
 
     fig.update_layout(
         template="plotly_dark", height=520, margin=dict(l=5, r=5, t=10, b=10),
-        xaxis_rangeslider_visible=False,
-        plot_bgcolor="#121722", paper_bgcolor="#121722",
+        xaxis_rangeslider_visible=False, plot_bgcolor="#121722", paper_bgcolor="#121722",
         legend=dict(orientation="h", y=1.03, x=0, font=dict(size=10))
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    # YouTube Trade Achievement & Pattern Banner
+    # Trade Achievement Banner
     st.markdown(f"""
     <div style="background:{achieve_bg}; padding:10px 14px; border-radius:8px; border:1px solid #2d3b52; margin-bottom:8px;">
         <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -378,7 +384,7 @@ elif st.session_state.current_view == 'chart':
     </div>
     """, unsafe_allow_html=True)
 
-    # Strength & Signal Card directly above Buy/Sell Buttons with 4-Color Scale
+    # Strength Metric Card
     st.markdown(f"""
     <div style="background:#1a2230; padding:10px 14px; border-radius:8px; margin-bottom:10px; border:1px solid #232c3d;">
         <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -392,7 +398,7 @@ elif st.session_state.current_view == 'chart':
     </div>
     """, unsafe_allow_html=True)
 
-    # In-Chart Instant Buy / Sell Buttons
+    # Action Buttons
     c_buy, c_sell = st.columns(2)
     with c_buy:
         if st.button(f"BUY @ ₹{curr_ltp:.2f}", type="primary"):
