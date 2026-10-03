@@ -8,7 +8,7 @@ from plotly.subplots import make_subplots
 # Page Configuration
 st.set_page_config(page_title="Angel One Pro Terminal", layout="wide", initial_sidebar_state="collapsed")
 
-# Precise Angel One CSS Styling
+# Precise Angel One Styling with Exact BUY/SELL Button Colors
 st.markdown("""
 <style>
     .stApp {
@@ -18,7 +18,7 @@ st.markdown("""
     }
     header {visibility: hidden;}
     footer {visibility: hidden;}
-    .block-container { padding-top: 0.8rem; padding-bottom: 5rem; padding-left: 0.8rem; padding-right: 0.8rem; }
+    .block-container { padding-top: 0.8rem; padding-bottom: 5.5rem; padding-left: 0.8rem; padding-right: 0.8rem; }
 
     .top-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
     .top-tabs { display: flex; gap: 15px; border-bottom: 1px solid #232c3d; padding-bottom: 8px; font-size: 14px; color: #788699; }
@@ -44,6 +44,43 @@ st.markdown("""
     .muted-text { color: #788699; font-size: 12px; }
     .bold-white { color: #f0f3f8; font-weight: 600; }
 
+    /* Custom Buy & Sell Buttons Styling */
+    div[data-testid="stButton"] > button:first-child {
+        width: 100% !important;
+        border-radius: 8px !important;
+        font-weight: bold !important;
+        font-size: 15px !important;
+        padding: 10px 0 !important;
+        border: none !important;
+        color: #ffffff !important;
+    }
+
+    /* BUY Button - Vibrant Green */
+    div.buy-btn-container div[data-testid="stButton"] > button {
+        background-color: #00d09c !important;
+        color: #121722 !important;
+    }
+    div.buy-btn-container div[data-testid="stButton"] > button:hover {
+        background-color: #00b386 !important;
+    }
+
+    /* SELL Button - Coral Red */
+    div.sell-btn-container div[data-testid="stButton"] > button {
+        background-color: #eb5b62 !important;
+        color: #ffffff !important;
+    }
+    div.sell-btn-container div[data-testid="stButton"] > button:hover {
+        background-color: #d9434a !important;
+    }
+
+    /* Charts / Details Neutral Button */
+    div.chart-btn-container div[data-testid="stButton"] > button {
+        background-color: #212a3b !important;
+        color: #f0f3f8 !important;
+        border: 1px solid #2d3b52 !important;
+    }
+
+    /* Bottom Navigation Bar */
     .bottom-nav {
         position: fixed;
         bottom: 0;
@@ -59,13 +96,6 @@ st.markdown("""
     .nav-item { text-align: center; color: #788699; font-size: 11px; text-decoration: none; }
     .nav-active { color: #5379fe !important; font-weight: bold; }
     .nav-icon { font-size: 18px; margin-bottom: 2px; }
-
-    .stButton>button {
-        width: 100%;
-        border-radius: 8px;
-        font-weight: 600;
-        border: none;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -75,7 +105,6 @@ if 'current_view' not in st.session_state:
 if 'selected_stock' not in st.session_state:
     st.session_state.selected_stock = 'ITC'
 
-# Portfolio Data with Today's Gain/Loss Metrics
 portfolio_data = {
     'ITC': {
         'name': 'ITC Ltd', 'sym': 'ITC.NS', 'shares': 1850, 'atp': 308.21, 'ltp': 255.90,
@@ -100,7 +129,7 @@ portfolio_data = {
 }
 
 # ========================================================
-# 1. SCREEN 1: PORTFOLIO SCREEN WITH TODAY'S P&L
+# 1. SCREEN 1: PORTFOLIO SCREEN
 # ========================================================
 if st.session_state.current_view == 'portfolio':
     st.markdown("""
@@ -117,7 +146,6 @@ if st.session_state.current_view == 'portfolio':
     <br>
     """, unsafe_allow_html=True)
 
-    # Top Wealth Card
     st.markdown("""
     <div class="overall-card">
         <div style="font-size: 24px; font-weight: bold;">₹16,02,788 👁️</div>
@@ -136,7 +164,6 @@ if st.session_state.current_view == 'portfolio':
     <div style="color:#788699; font-size:13px; margin-bottom:8px;">🔍 Search stocks by company</div>
     """, unsafe_allow_html=True)
 
-    # Stock List with Today's P&L Highlighted
     for key, item in portfolio_data.items():
         c_body, c_btn = st.columns([4, 1])
         today_class = 'gain-green' if item['today_pnl'] >= 0 else 'loss-red'
@@ -162,10 +189,12 @@ if st.session_state.current_view == 'portfolio':
             </div>
             """, unsafe_allow_html=True)
         with c_btn:
+            st.markdown('<div class="chart-btn-container">', unsafe_allow_html=True)
             if st.button("View", key=f"v_{key}"):
                 st.session_state.selected_stock = key
                 st.session_state.current_view = 'detail'
                 st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
 
 # ========================================================
 # 2. SCREEN 2: STOCK DETAIL OVERVIEW
@@ -177,9 +206,11 @@ elif st.session_state.current_view == 'detail':
 
     top_c1, top_c2 = st.columns([1, 4])
     with top_c1:
+        st.markdown('<div class="chart-btn-container">', unsafe_allow_html=True)
         if st.button("← Back"):
             st.session_state.current_view = 'portfolio'
             st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
     with top_c2:
         st.markdown(f"""
         <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -203,7 +234,7 @@ elif st.session_state.current_view == 'detail':
 
     st.markdown(f"""
     <div class="angel-card">
-        <div class="muted-text">Overall P&L 👁️️</div>
+        <div class="muted-text">Overall P&L 👁</div>
         <div class="{'gain-green' if stock['pnl']>=0 else 'loss-red'}" style="font-size:22px;">₹{stock['pnl']:,.2f} ({stock['pnl_pct']:.2f}%)</div>
         <div class="muted-text" style="margin-top:4px;">Today's P&L: <b class="{today_class}">{today_sign}₹{stock['today_pnl']:,.2f} ({today_sign}{stock['today_pnl_pct']:.2f}%)</b></div>
         <hr style="border-color:#232c3d; margin:10px 0;">
@@ -216,20 +247,27 @@ elif st.session_state.current_view == 'detail':
     </div>
     """, unsafe_allow_html=True)
 
-    btn_chart, btn_b, btn_s = st.columns([2, 1.5, 1.5])
+    # Angel One Bottom Action Buttons (Color Fixed)
+    btn_chart, btn_b, btn_s = st.columns([1.5, 1.5, 1.5])
     with btn_chart:
-        if st.button("📊 Charts", type="secondary"):
+        st.markdown('<div class="chart-btn-container">', unsafe_allow_html=True)
+        if st.button("📊 Charts"):
             st.session_state.current_view = 'chart'
             st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
     with btn_b:
-        if st.button("BUY", type="primary"):
-            st.toast("Buy Order Placed")
+        st.markdown('<div class="buy-btn-container">', unsafe_allow_html=True)
+        if st.button("BUY"):
+            st.toast("Buy Order Placed Successfully!")
+        st.markdown('</div>', unsafe_allow_html=True)
     with btn_s:
+        st.markdown('<div class="sell-btn-container">', unsafe_allow_html=True)
         if st.button("SELL"):
-            st.toast("Sell Order Placed")
+            st.toast("Sell Order Placed Successfully!")
+        st.markdown('</div>', unsafe_allow_html=True)
 
 # ========================================================
-# 3. SCREEN 3: PRO CHART TERMINAL WITH PATTERNS & TARGETS
+# 3. SCREEN 3: PRO CHART TERMINAL (Color Fixed)
 # ========================================================
 elif st.session_state.current_view == 'chart':
     stock = portfolio_data[st.session_state.selected_stock]
@@ -237,9 +275,11 @@ elif st.session_state.current_view == 'chart':
 
     c_bk, c_tf = st.columns([1, 4])
     with c_bk:
+        st.markdown('<div class="chart-btn-container">', unsafe_allow_html=True)
         if st.button("← Details"):
             st.session_state.current_view = 'detail'
             st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
     with c_tf:
         tf_choice = st.radio("TF", ["1m", "5m", "15m", "1h", "1D", "1W"], horizontal=True, index=2, label_visibility="collapsed")
 
@@ -260,7 +300,7 @@ elif st.session_state.current_view == 'chart':
 
     curr_ltp = float(df['Close'].iloc[-1])
 
-    # SuperTrend Calculation (10, 3)
+    # SuperTrend Calculation
     df['TR'] = np.maximum((df['High'] - df['Low']), np.maximum(abs(df['High'] - df['Close'].shift(1)), abs(df['Low'] - df['Close'].shift(1))))
     df['ATR'] = df['TR'].rolling(10).mean().bfill()
     df['Basic_UB'] = (df['High'] + df['Low']) / 2 + (3 * df['ATR'])
@@ -398,14 +438,18 @@ elif st.session_state.current_view == 'chart':
     </div>
     """, unsafe_allow_html=True)
 
-    # Action Buttons
+    # Custom Vibrant BUY / SELL Buttons on Chart Page
     c_buy, c_sell = st.columns(2)
     with c_buy:
-        if st.button(f"BUY @ ₹{curr_ltp:.2f}", type="primary"):
+        st.markdown('<div class="buy-btn-container">', unsafe_allow_html=True)
+        if st.button(f"BUY @ ₹{curr_ltp:.2f}"):
             st.toast(f"Buy Order Executed @ ₹{curr_ltp:.2f}")
+        st.markdown('</div>', unsafe_allow_html=True)
     with c_sell:
+        st.markdown('<div class="sell-btn-container">', unsafe_allow_html=True)
         if st.button(f"SELL @ ₹{curr_ltp:.2f}"):
             st.toast(f"Sell Order Executed @ ₹{curr_ltp:.2f}")
+        st.markdown('</div>', unsafe_allow_html=True)
 
 # ========================================================
 # 4. FIXED BOTTOM NAVIGATION BAR
