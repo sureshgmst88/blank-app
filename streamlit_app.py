@@ -202,7 +202,7 @@ elif st.session_state.current_view == 'detail':
             st.toast("Sell Order Placed")
 
 # ========================================================
-# 3. SCREEN 3: PRO CHART WITH CUSTOM 4-COLOR SCALE
+# 3. SCREEN 3: ADVANCED YOUTUBE STYLE CHART TERMINAL
 # ========================================================
 elif st.session_state.current_view == 'chart':
     stock = portfolio_data[st.session_state.selected_stock]
@@ -227,13 +227,13 @@ elif st.session_state.current_view == 'chart':
         return d.dropna()
 
     df = fetch_chart_data(sym, p, i)
-    if df.empty or len(df) < 20:
+    if df.empty or len(df) < 25:
         st.warning("கேண்டில் டேட்டா ஏற்றப்படவில்லை. மீண்டும் முயற்சிக்கவும்.")
         st.stop()
 
     curr_ltp = float(df['Close'].iloc[-1])
 
-    # SuperTrend Indicator Calculation (10, 3)
+    # SuperTrend Calculation (10, 3)
     df['TR'] = np.maximum((df['High'] - df['Low']), np.maximum(abs(df['High'] - df['Close'].shift(1)), abs(df['Low'] - df['Close'].shift(1))))
     df['ATR'] = df['TR'].rolling(10).mean().bfill()
     df['Basic_UB'] = (df['High'] + df['Low']) / 2 + (3 * df['ATR'])
@@ -256,7 +256,7 @@ elif st.session_state.current_view == 'chart':
     df['SuperTrend'] = supertrend
     df['ST_Dir'] = st_dir
 
-    # Indicators: RSI & Volume SMA
+    # RSI & Volume SMA
     delta = df['Close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
@@ -266,54 +266,47 @@ elif st.session_state.current_view == 'chart':
     vol_sma = df['Volume'].rolling(20).mean().iloc[-1]
     vol_now = df['Volume'].iloc[-1]
 
-    # Dynamic Strength Calculation (0 - 100%)
+    # Strength Metric (4-Color Scale)
     strength_pct = int(min(max(abs(rsi_now - 50) * 2 + (vol_now / (vol_sma + 1e-9) * 20), 10), 98))
-
-    # --- 4-Color Scale Logic ---
     if strength_pct >= 75:
-        str_color = "#00d09c"  # Strong Green
-        str_label = "HIGH STRENGTH (GREEN)"
+        str_color = "#00d09c"
+        str_label = "STRONG BULLISH / BEARISH"
         trend_line_color = "#00d09c"
     elif strength_pct >= 50:
-        str_color = "#ffeb3b"  # Yellow (50% to 75%)
-        str_label = "MODERATE (YELLOW)"
+        str_color = "#ffeb3b"
+        str_label = "MODERATE MOMENTUM"
         trend_line_color = "#ffeb3b"
     elif strength_pct >= 40:
-        str_color = "#ff8a80"  # Light Pink / Soft Red (40% to 50%)
-        str_label = "WEAKENING (LIGHT RED/PINK)"
+        str_color = "#ff8a80"
+        str_label = "WEAKENING / NEUTRAL"
         trend_line_color = "#ff8a80"
     else:
-        str_color = "#d50000"  # Deep Red (< 40%)
-        str_label = "EXTREME WEAK / RISK (RED)"
+        str_color = "#d50000"
+        str_label = "EXTREME RISK / EXHAUSTION"
         trend_line_color = "#d50000"
 
-    # Fake Breakout Detection
-    recent_high = df['High'].iloc[-15:-1].max()
-    recent_low = df['Low'].iloc[-15:-1].min()
-    fake_breakout = False
-    fake_msg = "✅ NORMAL PRICE ACTION"
-    fake_bg = "#1f2937"
+    # Pattern Recognition (Evening Star / Triangle / Channel)
+    c1, c2, c3 = df.iloc[-3], df.iloc[-2], df.iloc[-1]
+    detected_pattern = "Consolidation / Channel Range"
+    if c1['Close'] > c1['Open'] and abs(c2['Close'] - c2['Open']) < (c1['High'] - c1['Low']) * 0.3 and c3['Close'] < c3['Open']:
+        detected_pattern = "Evening Star Pattern (Bearish Reversal)"
+    elif c1['Close'] < c1['Open'] and abs(c2['Close'] - c2['Open']) < (c1['High'] - c1['Low']) * 0.3 and c3['Close'] > c3['Open']:
+        detected_pattern = "Morning Star Pattern (Bullish Reversal)"
 
-    if curr_ltp > recent_high and (vol_now < vol_sma * 0.8 or rsi_now > 75):
-        fake_breakout = True
-        fake_msg = "⚠️ FAKE BULLISH BREAKOUT (BULL TRAP)"
-        fake_bg = "#7f1d1d"
-    elif curr_ltp < recent_low and (vol_now < vol_sma * 0.8 or rsi_now < 25):
-        fake_breakout = True
-        fake_msg = "⚠️ FAKE BEARISH BREAKOUT (BEAR TRAP)"
-        fake_bg = "#7f1d1d"
-    elif curr_ltp > recent_high:
-        fake_msg = "🚀 GENUINE BULLISH BREAKOUT"
-        fake_bg = "#064e3b"
-    elif curr_ltp < recent_low:
-        fake_msg = "🔻 GENUINE BEARISH BREAKDOWN"
-        fake_bg = "#064e3b"
-
-    # Target & Stop-loss
+    recent_high = float(df['High'].iloc[-20:].max())
+    recent_low = float(df['Low'].iloc[-20:].min())
     is_downtrend = not df['ST_Dir'].iloc[-1]
     trend_state = "DOWNTREND" if is_downtrend else "UPTREND"
+
+    # Target & Stop Loss Calculation
     stop_loss = round(df['SuperTrend'].iloc[-1], 2)
-    target = round(curr_ltp - (stop_loss - curr_ltp) * 1.5, 2) if is_downtrend else round(curr_ltp + (curr_ltp - stop_loss) * 1.5, 2)
+    risk_diff = abs(curr_ltp - stop_loss)
+    target = round(curr_ltp - (risk_diff * 1.5), 2) if is_downtrend else round(curr_ltp + (risk_diff * 1.5), 2)
+
+    # YouTube Style Achievement Check
+    achieved = (curr_ltp <= target) if is_downtrend else (curr_ltp >= target)
+    achieve_text = "🎉 TARGET ACHIEVED! (+1:1.5 RR)" if achieved else "⏳ RUNNING IN TARGET DIRECTION"
+    achieve_bg = "#064e3b" if achieved else "#1a2230"
 
     # Plotly Subplot
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.02, row_heights=[0.75, 0.25])
@@ -324,14 +317,37 @@ elif st.session_state.current_view == 'chart':
         name="Candles", increasing_line_color='#00d09c', decreasing_line_color='#eb5b62'
     ), row=1, col=1)
 
-    # Dynamic Colored Trendline based on Market Strength
-    fig.add_trace(go.Scatter(
-        x=[df.index[-20], df.index[-1]],
-        y=[recent_high if is_downtrend else recent_low, curr_ltp],
-        mode='lines',
-        line=dict(color=trend_line_color, width=2.5, dash='dash'),
-        name=f"Dynamic Trendline ({str_label})"
-    ), row=1, col=1)
+    # 1. Parallel Channel / Flag Box (YouTube Flag Pattern)
+    x_start, x_end = df.index[-20], df.index[-1]
+    fig.add_shape(type="rect",
+        x0=x_start, y0=recent_low, x1=x_end, y1=recent_high,
+        line=dict(color=trend_line_color, width=1.5, dash="dot"),
+        fillcolor=str_color, opacity=0.08,
+        row=1, col=1
+    )
+
+    # 2. Risk-Reward Target Achievement Box (Green Target Zone / Red SL Zone)
+    target_box_top = max(curr_ltp, target)
+    target_box_bot = min(curr_ltp, target)
+    sl_box_top = max(curr_ltp, stop_loss)
+    sl_box_bot = min(curr_ltp, stop_loss)
+
+    # Green Target Box
+    fig.add_shape(type="rect",
+        x0=df.index[-8], y0=target_box_bot, x1=df.index[-1], y1=target_box_top,
+        line=dict(color="#00d09c", width=1), fillcolor="#00d09c", opacity=0.2,
+        row=1, col=1
+    )
+    # Red Stop Loss Box
+    fig.add_shape(type="rect",
+        x0=df.index[-8], y0=sl_box_bot, x1=df.index[-1], y1=sl_box_top,
+        line=dict(color="#eb5b62", width=1), fillcolor="#eb5b62", opacity=0.2,
+        row=1, col=1
+    )
+
+    # Target & Stop Loss Lines with Badges
+    fig.add_hline(y=target, line_color="#00d09c", line_dash="dash", annotation_text=f"🎯 TARGET ₹{target}", row=1, col=1)
+    fig.add_hline(y=stop_loss, line_color="#eb5b62", line_dash="dash", annotation_text=f"🛑 SL ₹{stop_loss}", row=1, col=1)
 
     # SuperTrend Step Line
     fig.add_trace(go.Scatter(
@@ -340,26 +356,25 @@ elif st.session_state.current_view == 'chart':
         name="SuperTrend"
     ), row=1, col=1)
 
-    # In-Chart Stop-Loss & Target Lines
-    fig.add_hline(y=target, line_color="#00d09c", line_dash="dash", annotation_text=f"TARGET ₹{target}", row=1, col=1)
-    fig.add_hline(y=stop_loss, line_color="#eb5b62", line_dash="dash", annotation_text=f"STOP LOSS ₹{stop_loss}", row=1, col=1)
-
     # Volume Subplot
     colors_vol = ['#00d09c' if c >= o else '#eb5b62' for c, o in zip(df['Close'], df['Open'])]
     fig.add_trace(go.Bar(x=df.index, y=df['Volume'], marker_color=colors_vol, name="Volume"), row=2, col=1)
 
     fig.update_layout(
-        template="plotly_dark", height=500, margin=dict(l=5, r=5, t=10, b=10),
+        template="plotly_dark", height=520, margin=dict(l=5, r=5, t=10, b=10),
         xaxis_rangeslider_visible=False,
         plot_bgcolor="#121722", paper_bgcolor="#121722",
         legend=dict(orientation="h", y=1.03, x=0, font=dict(size=10))
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    # Fake Breakout Banner
+    # YouTube Trade Achievement & Pattern Banner
     st.markdown(f"""
-    <div style="background:{fake_bg}; padding:8px 12px; border-radius:6px; font-size:12px; font-weight:bold; text-align:center; margin-bottom:8px; border:1px solid #374151;">
-        {fake_msg}
+    <div style="background:{achieve_bg}; padding:10px 14px; border-radius:8px; border:1px solid #2d3b52; margin-bottom:8px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="font-weight:bold; font-size:14px; color:#f0f3f8;">{achieve_text}</div>
+            <div style="color:#788699; font-size:12px;">Pattern: <b style="color:#ffeb3b;">{detected_pattern}</b></div>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -367,7 +382,7 @@ elif st.session_state.current_view == 'chart':
     st.markdown(f"""
     <div style="background:#1a2230; padding:10px 14px; border-radius:8px; margin-bottom:10px; border:1px solid #232c3d;">
         <div style="display:flex; justify-content:space-between; align-items:center;">
-            <div><b>Trend:</b> <span style="color:{'#eb5b62' if is_downtrend else '#00d09c'};">{trend_state}</span></div>
+            <div><b>Trend:</b> <span style="color:{'#eb5b62' if is_downtrend else '#00d09c'}; font-weight:bold;">{trend_state}</span></div>
             <div><b>Strength:</b> <span style="color:{str_color}; font-size:15px; font-weight:bold;">{strength_pct}% ({str_label})</span></div>
             <div><b>LTP:</b> ₹{curr_ltp:.2f}</div>
         </div>
