@@ -1,221 +1,400 @@
-import numpy as np
-import pandas as pd
-import plotly.graph_objects as go
-from scipy.signal import argrelextrema
-from scipy.stats import linregress
 import streamlit as st
 import yfinance as yf
+import pandas as pd
+import numpy as np
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
-# 1. Page Configuration
-st.set_page_config(
-    page_title="AI Trade Pro - Auto Chart & Patterns",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
+# Page Configuration
+st.set_page_config(page_title="Angel One Pro Terminal", layout="wide", initial_sidebar_state="collapsed")
 
-st.title("AI Trade Pro: Auto Pattern & Trendline Engine")
-st.caption("Auto Chart Analyzer & Pattern Detection System | Free")
+# Precise Angel One CSS Styling
+st.markdown("""
+<style>
+    .stApp {
+        background-color: #121722 !important;
+        color: #f0f3f8 !important;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    header {visibility: hidden;}
+    footer {visibility: hidden;}
+    .block-container { padding-top: 0.8rem; padding-bottom: 5rem; padding-left: 0.8rem; padding-right: 0.8rem; }
 
-# 2. Sidebar Controls
-st.sidebar.header("Controls")
-broker_choice = st.sidebar.selectbox(
-    "Trading Account (Broker)", ["Angel One", "Upstox"]
-)
-st.sidebar.info(f"Connected: {broker_choice} (SmartAPI Mode)")
+    .top-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .top-tabs { display: flex; gap: 15px; border-bottom: 1px solid #232c3d; padding-bottom: 8px; font-size: 14px; color: #788699; }
+    .tab-active { color: #5379fe; font-weight: bold; border-bottom: 2px solid #5379fe; padding-bottom: 8px; }
 
-symbol_input = st.sidebar.text_input("Stock Symbol", value="TATASTEEL.NS")
-timeframe = st.sidebar.selectbox(
-    "Timeframe", ["5m", "15m", "1h", "1d"], index=1
-)
-period_map = {"5m": "5d", "15m": "10d", "1h": "1mo", "1d": "6mo"}
+    .angel-card {
+        background-color: #1a2230;
+        border-radius: 12px;
+        padding: 14px 16px;
+        margin-bottom: 10px;
+        border: 1px solid #232c3d;
+    }
+    .overall-card {
+        background: linear-gradient(135deg, #1b263b 0%, #151d2c 100%);
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 15px;
+        border: 1px solid #2d3b52;
+    }
 
+    .loss-red { color: #eb5b62 !important; font-weight: 600; }
+    .gain-green { color: #00d09c !important; font-weight: 600; }
+    .muted-text { color: #788699; font-size: 12px; }
+    .bold-white { color: #f0f3f8; font-weight: 600; }
 
-# 3. Data Loading
-@st.cache_data(ttl=60)
-def load_data(ticker, interval, period):
-  df = yf.download(ticker, period=period, interval=interval)
-  if isinstance(df.columns, pd.MultiIndex):
-    df.columns = df.columns.get_level_values(0)
-  return df
+    .bottom-nav {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        background-color: #161c28;
+        display: flex;
+        justify-content: space-around;
+        padding: 8px 0;
+        border-top: 1px solid #232c3d;
+        z-index: 9999;
+    }
+    .nav-item { text-align: center; color: #788699; font-size: 11px; text-decoration: none; }
+    .nav-active { color: #5379fe !important; font-weight: bold; }
+    .nav-icon { font-size: 18px; margin-bottom: 2px; }
 
+    .stButton>button {
+        width: 100%;
+        border-radius: 8px;
+        font-weight: 600;
+        border: none;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-df = load_data(symbol_input, timeframe, period_map[timeframe])
+# State Management
+if 'current_view' not in st.session_state:
+    st.session_state.current_view = 'portfolio'
+if 'selected_stock' not in st.session_state:
+    st.session_state.selected_stock = 'ITC'
 
-if df.empty:
-  st.error("Data not found. Please check stock symbol.")
-  st.stop()
+portfolio_data = {
+    'ITC': {'name': 'ITC Ltd', 'sym': 'ITC.NS', 'shares': 1850, 'atp': 308.21, 'ltp': 255.90, 'inv': 570197, 'val': 473415, 'pnl': -96773.49, 'pnl_pct': -16.97},
+    'DRREDDY': {'name': "Dr. Reddy's Lab", 'sym': 'DRREDDY.NS', 'shares': 1, 'atp': 1316.81, 'ltp': 1206.20, 'inv': 1316, 'val': 1206, 'pnl': -110.61, 'pnl_pct': -8.41},
+    'ITCHOTELS': {'name': 'ITC Hotels', 'sym': 'ITCHOTELS.NS', 'shares': 8, 'atp': 513.47, 'ltp': 158.51, 'inv': 4107, 'val': 1268, 'pnl': -2839.68, 'pnl_pct': -69.14},
+    'SAKUMA': {'name': 'Sakuma Exports', 'sym': 'SAKUMA.NS', 'shares': 100, 'atp': 7.80, 'ltp': 5.40, 'inv': 780, 'val': 540, 'pnl': -240.00, 'pnl_pct': -30.87}
+}
 
-# 4. Indicators (RSI & EMA)
-delta = df["Close"].diff()
-gain = delta.where(delta > 0, 0.0).rolling(window=14).mean()
-loss = (-delta.where(delta < 0, 0.0)).rolling(window=14).mean()
-rs = gain / (loss + 1e-9)
-df["RSI"] = 100 - (100 / (1 + rs))
+# ========================================================
+# 1. SCREEN 1: PORTFOLIO SCREEN
+# ========================================================
+if st.session_state.current_view == 'portfolio':
+    st.markdown("""
+    <div class="top-header">
+        <div style="font-size: 20px; font-weight: bold;">Holdings <span style="font-size:14px; font-weight:normal; color:#788699;">My Wealth</span></div>
+        <div style="font-size: 18px; color: #788699;">👤 🔍 ⋮</div>
+    </div>
+    <div class="top-tabs">
+        <div>Overview</div>
+        <div class="tab-active">Equity</div>
+        <div>Mutual Funds</div>
+        <div>Investment Picks</div>
+    </div>
+    <br>
+    """, unsafe_allow_html=True)
 
-df["EMA_20"] = df["Close"].ewm(span=20, adjust=False).mean()
-df["EMA_50"] = df["Close"].ewm(span=50, adjust=False).mean()
-df["Vol_SMA"] = df["Volume"].rolling(window=20).mean()
+    st.markdown("""
+    <div class="overall-card">
+        <div style="font-size: 24px; font-weight: bold;">₹16,02,788 👁️</div>
+        <div class="loss-red" style="font-size:13px; margin: 4px 0 12px 0;">↓ Overall Loss -₹3,17,701.45 (-16.54%)</div>
+        <div style="display:flex; justify-content:space-between; border-top: 1px solid #232c3d; padding-top: 8px;">
+            <div>
+                <div class="muted-text">Invested Value</div>
+                <div class="bold-white" style="font-size:14px;">₹19,20,509</div>
+            </div>
+            <div style="text-align: right;">
+                <div class="muted-text">Today's Gain</div>
+                <div class="gain-green" style="font-size:14px;">+₹0.01 (+0.00%)</div>
+            </div>
+        </div>
+    </div>
+    <div style="color:#788699; font-size:13px; margin-bottom:8px;">🔍 Search stocks by company</div>
+    """, unsafe_allow_html=True)
 
-# 5. Extrema Peaks / Troughs
-highs = df["High"].values
-lows = df["Low"].values
-peak_idx = argrelextrema(highs, np.greater_equal, order=4)[0]
-trough_idx = argrelextrema(lows, np.less_equal, order=4)[0]
+    for key, item in portfolio_data.items():
+        c_body, c_btn = st.columns([4, 1])
+        with c_body:
+            st.markdown(f"""
+            <div class="angel-card">
+                <div style="display:flex; justify-content:space-between;">
+                    <div style="font-weight:bold; font-size:15px;">{key}</div>
+                    <div class="{'gain-green' if item['pnl']>=0 else 'loss-red'}">₹{item['pnl']:,.2f} ({item['pnl_pct']:.2f}%)</div>
+                </div>
+                <div style="display:flex; justify-content:space-between; margin-top:3px;">
+                    <div class="muted-text">ATP ₹{item['atp']:.2f}</div>
+                    <div><span class="muted-text">LTP</span> <span class="bold-white">₹{item['ltp']:.2f}</span></div>
+                </div>
+                <div style="display:flex; justify-content:space-between; margin-top:2px;">
+                    <div class="muted-text">Shares {item['shares']}</div>
+                    <div class="muted-text">Current ₹{item['val']:,}</div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        with c_btn:
+            if st.button("View", key=f"v_{key}"):
+                st.session_state.selected_stock = key
+                st.session_state.current_view = 'detail'
+                st.rerun()
 
-df["Peak"] = False
-df["Trough"] = False
-df.iloc[peak_idx, df.columns.get_loc("Peak")] = True
-df.iloc[trough_idx, df.columns.get_loc("Trough")] = True
+# ========================================================
+# 2. SCREEN 2: STOCK DETAIL OVERVIEW
+# ========================================================
+elif st.session_state.current_view == 'detail':
+    stock = portfolio_data[st.session_state.selected_stock]
 
-# 6. Trend & Pattern Recognition
-current_price = float(df["Close"].iloc[-1])
-current_rsi = float(df["RSI"].iloc[-1])
-current_vol = float(df["Volume"].iloc[-1])
-avg_vol = float(df["Vol_SMA"].iloc[-1])
-trend = "UPTREND" if df["EMA_20"].iloc[-1] > df["EMA_50"].iloc[-1] else "DOWNTREND"
+    top_c1, top_c2 = st.columns([1, 4])
+    with top_c1:
+        if st.button("← Back"):
+            st.session_state.current_view = 'portfolio'
+            st.rerun()
+    with top_c2:
+        st.markdown(f"""
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div>
+                <div style="font-size:18px; font-weight:bold;">{stock['name']}</div>
+                <div class="muted-text">NSE</div>
+            </div>
+            <div style="text-align:right;">
+                <div style="font-size:18px; font-weight:bold; color:#eb5b62;">₹{stock['ltp']:.2f} ▼</div>
+                <div class="loss-red" style="font-size:12px;">-6.85 (-2.61%)</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
-recent_peaks = df[df["Peak"]].tail(5)
-recent_troughs = df[df["Trough"]].tail(5)
+    dates = pd.date_range(end=pd.Timestamp.now(), periods=30)
+    prices = np.linspace(stock['atp'], stock['ltp'], 30) + np.random.normal(0, 1.5, 30)
+    fig_mini = go.Figure()
+    fig_mini.add_trace(go.Scatter(x=dates, y=prices, mode='lines', line=dict(color='#eb5b62', width=2), fill='tozeroy', fillcolor='rgba(235,91,98,0.08)'))
+    fig_mini.update_layout(template="plotly_dark", height=130, margin=dict(l=0, r=0, t=10, b=0), xaxis=dict(visible=False), yaxis=dict(visible=False), plot_bgcolor="#121722", paper_bgcolor="#121722")
+    st.plotly_chart(fig_mini, use_container_width=True)
 
-detected_pattern = "Normal Swing"
-signal_type = "WAIT"
-confidence = 40
-entry, sl, target = None, None, None
-reason = "No classic breakout pattern detected."
+    st.markdown(f"""
+    <div class="angel-card">
+        <div class="muted-text">Overall Loss 👁️</div>
+        <div class="loss-red" style="font-size:22px;">₹{stock['pnl']:,.2f} ({stock['pnl_pct']:.2f}%)</div>
+        <hr style="border-color:#232c3d; margin:10px 0;">
+        <div style="display:grid; grid-template-columns: 1fr 1fr; row-gap:12px;">
+            <div><span class="muted-text">Total Quantity</span><br><b>{stock['shares']}</b></div>
+            <div><span class="muted-text">Avg Traded Price</span><br><b>₹{stock['atp']:.2f}</b></div>
+            <div><span class="muted-text">Invested</span><br><b>₹{stock['inv']:,}</b></div>
+            <div><span class="muted-text">Market Value</span><br><b>₹{stock['val']:,}</b></div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-# W-Pattern (Double Bottom)
-if len(recent_troughs) >= 2 and len(recent_peaks) >= 1:
-  b1 = recent_troughs.iloc[-2]["Low"]
-  b2 = recent_troughs.iloc[-1]["Low"]
-  if abs(b1 - b2) / b1 < 0.025:
-    neckline = recent_peaks.iloc[-1]["High"]
-    detected_pattern = "W-Pattern (Double Bottom - Bullish)"
-    signal_type = "BUY / LONG"
-    height = neckline - min(b1, b2)
-    entry = round(neckline, 2)
-    sl = round(b2 * 0.995, 2)
-    target = round(neckline + height, 2)
-    confidence = 75 if current_vol > avg_vol else 55
-    reason = f"Double bottom support formed. Buy on breakout above {entry}."
+    btn_chart, btn_b, btn_s = st.columns([2, 1.5, 1.5])
+    with btn_chart:
+        if st.button("📊 Charts", type="secondary"):
+            st.session_state.current_view = 'chart'
+            st.rerun()
+    with btn_b:
+        if st.button("BUY", type="primary"):
+            st.toast("Buy Order Placed")
+    with btn_s:
+        if st.button("SELL"):
+            st.toast("Sell Order Placed")
 
-# M-Pattern (Double Top)
-elif len(recent_peaks) >= 2 and len(recent_troughs) >= 1:
-  p1 = recent_peaks.iloc[-2]["High"]
-  p2 = recent_peaks.iloc[-1]["High"]
-  if abs(p1 - p2) / p1 < 0.025:
-    neckline = recent_troughs.iloc[-1]["Low"]
-    detected_pattern = "M-Pattern (Double Top - Bearish)"
-    signal_type = "SELL / SHORT"
-    height = max(p1, p2) - neckline
-    entry = round(neckline, 2)
-    sl = round(p2 * 1.005, 2)
-    target = round(neckline - height, 2)
-    confidence = 75 if current_vol > avg_vol else 55
-    reason = f"Double top resistance rejection. Short on breakdown below {entry}."
+# ========================================================
+# 3. SCREEN 3: PRO CHART WITH CUSTOM 4-COLOR SCALE
+# ========================================================
+elif st.session_state.current_view == 'chart':
+    stock = portfolio_data[st.session_state.selected_stock]
+    sym = stock['sym']
 
-# Head & Shoulders
-elif len(recent_peaks) >= 3 and len(recent_troughs) >= 2:
-  p1, p2, p3 = (
-      recent_peaks.iloc[-3]["High"],
-      recent_peaks.iloc[-2]["High"],
-      recent_peaks.iloc[-1]["High"],
-  )
-  if p2 > p1 and p2 > p3 and abs(p1 - p3) / p1 < 0.035:
-    neckline = min(
-        recent_troughs.iloc[-2]["Low"], recent_troughs.iloc[-1]["Low"]
+    c_bk, c_tf = st.columns([1, 4])
+    with c_bk:
+        if st.button("← Details"):
+            st.session_state.current_view = 'detail'
+            st.rerun()
+    with c_tf:
+        tf_choice = st.radio("TF", ["1m", "5m", "15m", "1h", "1D", "1W"], horizontal=True, index=2, label_visibility="collapsed")
+
+    tf_lookup = {"1m": ("1d", "1m"), "5m": ("5d", "5m"), "15m": ("1mo", "15m"), "1h": ("1mo", "60m"), "1D": ("1y", "1d"), "1W": ("2y", "1wk")}
+    p, i = tf_lookup[tf_choice]
+
+    @st.cache_data(ttl=60)
+    def fetch_chart_data(s, prd, itv):
+        d = yf.download(s, period=prd, interval=itv, progress=False)
+        if isinstance(d.columns, pd.MultiIndex):
+            d.columns = d.columns.get_level_values(0)
+        return d.dropna()
+
+    df = fetch_chart_data(sym, p, i)
+    if df.empty or len(df) < 20:
+        st.warning("கேண்டில் டேட்டா ஏற்றப்படவில்லை. மீண்டும் முயற்சிக்கவும்.")
+        st.stop()
+
+    curr_ltp = float(df['Close'].iloc[-1])
+
+    # SuperTrend Indicator Calculation (10, 3)
+    df['TR'] = np.maximum((df['High'] - df['Low']), np.maximum(abs(df['High'] - df['Close'].shift(1)), abs(df['Low'] - df['Close'].shift(1))))
+    df['ATR'] = df['TR'].rolling(10).mean().bfill()
+    df['Basic_UB'] = (df['High'] + df['Low']) / 2 + (3 * df['ATR'])
+    df['Basic_LB'] = (df['High'] + df['Low']) / 2 - (3 * df['ATR'])
+
+    supertrend = [df['Basic_LB'].iloc[0]]
+    st_dir = [True]
+    for idx in range(1, len(df)):
+        c = df['Close'].iloc[idx]
+        prev_st = supertrend[-1]
+        is_up = st_dir[-1]
+        if is_up:
+            st_val = max(df['Basic_LB'].iloc[idx], prev_st) if c > prev_st else df['Basic_UB'].iloc[idx]
+            is_up = c > prev_st
+        else:
+            st_val = min(df['Basic_UB'].iloc[idx], prev_st) if c < prev_st else df['Basic_LB'].iloc[idx]
+            is_up = c >= prev_st
+        supertrend.append(st_val)
+        st_dir.append(is_up)
+    df['SuperTrend'] = supertrend
+    df['ST_Dir'] = st_dir
+
+    # Indicators: RSI & Volume SMA
+    delta = df['Close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
+    rs = gain / (loss + 1e-9)
+    df['RSI'] = 100 - (100 / (1 + rs))
+    rsi_now = float(df['RSI'].iloc[-1])
+    vol_sma = df['Volume'].rolling(20).mean().iloc[-1]
+    vol_now = df['Volume'].iloc[-1]
+
+    # Dynamic Strength Calculation (0 - 100%)
+    strength_pct = int(min(max(abs(rsi_now - 50) * 2 + (vol_now / (vol_sma + 1e-9) * 20), 10), 98))
+
+    # --- 4-Color Scale Logic ---
+    if strength_pct >= 75:
+        str_color = "#00d09c"  # Strong Green
+        str_label = "HIGH STRENGTH (GREEN)"
+        trend_line_color = "#00d09c"
+    elif strength_pct >= 50:
+        str_color = "#ffeb3b"  # Yellow (50% to 75%)
+        str_label = "MODERATE (YELLOW)"
+        trend_line_color = "#ffeb3b"
+    elif strength_pct >= 40:
+        str_color = "#ff8a80"  # Light Pink / Soft Red (40% to 50%)
+        str_label = "WEAKENING (LIGHT RED/PINK)"
+        trend_line_color = "#ff8a80"
+    else:
+        str_color = "#d50000"  # Deep Red (< 40%)
+        str_label = "EXTREME WEAK / RISK (RED)"
+        trend_line_color = "#d50000"
+
+    # Fake Breakout Detection
+    recent_high = df['High'].iloc[-15:-1].max()
+    recent_low = df['Low'].iloc[-15:-1].min()
+    fake_breakout = False
+    fake_msg = "✅ NORMAL PRICE ACTION"
+    fake_bg = "#1f2937"
+
+    if curr_ltp > recent_high and (vol_now < vol_sma * 0.8 or rsi_now > 75):
+        fake_breakout = True
+        fake_msg = "⚠️ FAKE BULLISH BREAKOUT (BULL TRAP)"
+        fake_bg = "#7f1d1d"
+    elif curr_ltp < recent_low and (vol_now < vol_sma * 0.8 or rsi_now < 25):
+        fake_breakout = True
+        fake_msg = "⚠️ FAKE BEARISH BREAKOUT (BEAR TRAP)"
+        fake_bg = "#7f1d1d"
+    elif curr_ltp > recent_high:
+        fake_msg = "🚀 GENUINE BULLISH BREAKOUT"
+        fake_bg = "#064e3b"
+    elif curr_ltp < recent_low:
+        fake_msg = "🔻 GENUINE BEARISH BREAKDOWN"
+        fake_bg = "#064e3b"
+
+    # Target & Stop-loss
+    is_downtrend = not df['ST_Dir'].iloc[-1]
+    trend_state = "DOWNTREND" if is_downtrend else "UPTREND"
+    stop_loss = round(df['SuperTrend'].iloc[-1], 2)
+    target = round(curr_ltp - (stop_loss - curr_ltp) * 1.5, 2) if is_downtrend else round(curr_ltp + (curr_ltp - stop_loss) * 1.5, 2)
+
+    # Plotly Subplot
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.02, row_heights=[0.75, 0.25])
+
+    # Candlestick
+    fig.add_trace(go.Candlestick(
+        x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'],
+        name="Candles", increasing_line_color='#00d09c', decreasing_line_color='#eb5b62'
+    ), row=1, col=1)
+
+    # Dynamic Colored Trendline based on Market Strength
+    fig.add_trace(go.Scatter(
+        x=[df.index[-20], df.index[-1]],
+        y=[recent_high if is_downtrend else recent_low, curr_ltp],
+        mode='lines',
+        line=dict(color=trend_line_color, width=2.5, dash='dash'),
+        name=f"Dynamic Trendline ({str_label})"
+    ), row=1, col=1)
+
+    # SuperTrend Step Line
+    fig.add_trace(go.Scatter(
+        x=df.index, y=df['SuperTrend'], mode='lines',
+        line=dict(color='#eb5b62' if is_downtrend else '#00d09c', width=2),
+        name="SuperTrend"
+    ), row=1, col=1)
+
+    # In-Chart Stop-Loss & Target Lines
+    fig.add_hline(y=target, line_color="#00d09c", line_dash="dash", annotation_text=f"TARGET ₹{target}", row=1, col=1)
+    fig.add_hline(y=stop_loss, line_color="#eb5b62", line_dash="dash", annotation_text=f"STOP LOSS ₹{stop_loss}", row=1, col=1)
+
+    # Volume Subplot
+    colors_vol = ['#00d09c' if c >= o else '#eb5b62' for c, o in zip(df['Close'], df['Open'])]
+    fig.add_trace(go.Bar(x=df.index, y=df['Volume'], marker_color=colors_vol, name="Volume"), row=2, col=1)
+
+    fig.update_layout(
+        template="plotly_dark", height=500, margin=dict(l=5, r=5, t=10, b=10),
+        xaxis_rangeslider_visible=False,
+        plot_bgcolor="#121722", paper_bgcolor="#121722",
+        legend=dict(orientation="h", y=1.03, x=0, font=dict(size=10))
     )
-    detected_pattern = "Head & Shoulders (Bearish Reversal)"
-    signal_type = "SELL / SHORT"
-    height = p2 - neckline
-    entry = round(neckline, 2)
-    sl = round(p3 * 1.005, 2)
-    target = round(neckline - height, 2)
-    confidence = 82 if current_vol > avg_vol else 60
-    reason = (
-        "Head and shoulders neckline breakdown confirmed. Strong downward"
-        " move expected."
-    )
+    st.plotly_chart(fig, use_container_width=True)
 
-# 7. Dashboard Metrics
-col1, col2, col3, col4 = st.columns(4)
-col1.metric("Current Price", f"₹{current_price:.2f}")
-col2.metric("Trend", trend)
-col3.metric("RSI (14)", f"{current_rsi:.1f}")
-col4.metric(
-    "Confidence Score",
-    f"{confidence}%",
-    delta="Strong Setup" if confidence >= 60 else "Weak",
-)
+    # Fake Breakout Banner
+    st.markdown(f"""
+    <div style="background:{fake_bg}; padding:8px 12px; border-radius:6px; font-size:12px; font-weight:bold; text-align:center; margin-bottom:8px; border:1px solid #374151;">
+        {fake_msg}
+    </div>
+    """, unsafe_allow_html=True)
 
-st.markdown("---")
+    # Strength & Signal Card directly above Buy/Sell Buttons with 4-Color Scale
+    st.markdown(f"""
+    <div style="background:#1a2230; padding:10px 14px; border-radius:8px; margin-bottom:10px; border:1px solid #232c3d;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div><b>Trend:</b> <span style="color:{'#eb5b62' if is_downtrend else '#00d09c'};">{trend_state}</span></div>
+            <div><b>Strength:</b> <span style="color:{str_color}; font-size:15px; font-weight:bold;">{strength_pct}% ({str_label})</span></div>
+            <div><b>LTP:</b> ₹{curr_ltp:.2f}</div>
+        </div>
+        <div style="width:100%; background:#232c3d; height:7px; border-radius:4px; margin-top:8px;">
+            <div style="width:{strength_pct}%; background:{str_color}; height:7px; border-radius:4px;"></div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-# 8. Signal Card
-st.subheader(f"AI Signal: {detected_pattern}")
-c_a, c_b, c_c, c_d = st.columns(4)
-c_a.write(f"**Action:** `{signal_type}`")
-c_b.write(f"**Entry:** ₹{entry if entry else '-'}")
-c_c.write(f"**Stop-Loss:** ₹{sl if sl else '-'}")
-c_d.write(f"**Target:** ₹{target if target else '-'}")
-st.info(f"Analysis Note: {reason}")
+    # In-Chart Instant Buy / Sell Buttons
+    c_buy, c_sell = st.columns(2)
+    with c_buy:
+        if st.button(f"BUY @ ₹{curr_ltp:.2f}", type="primary"):
+            st.toast(f"Buy Order Executed @ ₹{curr_ltp:.2f}")
+    with c_sell:
+        if st.button(f"SELL @ ₹{curr_ltp:.2f}"):
+            st.toast(f"Sell Order Executed @ ₹{curr_ltp:.2f}")
 
-# 9. Plotly Candlestick Chart
-fig = go.Figure()
-fig.add_trace(
-    go.Candlestick(
-        x=df.index,
-        open=df["Open"],
-        high=df["High"],
-        low=df["Low"],
-        close=df["Close"],
-        name="Candles",
-    )
-)
-fig.add_trace(
-    go.Scatter(
-        x=df.index,
-        y=df["EMA_20"],
-        line=dict(color="orange", width=1.2),
-        name="EMA 20",
-    )
-)
-fig.add_trace(
-    go.Scatter(
-        x=df.index,
-        y=df["EMA_50"],
-        line=dict(color="blue", width=1.2),
-        name="EMA 50",
-    )
-)
-
-if entry and sl and target:
-  fig.add_hline(
-      y=entry, line_dash="dash", line_color="cyan", annotation_text="Entry Level"
-  )
-  fig.add_hline(
-      y=sl, line_dash="dot", line_color="red", annotation_text="StopLoss (SL)"
-  )
-  fig.add_hline(
-      y=target,
-      line_dash="dash",
-      line_color="green",
-      annotation_text="Target Level",
-  )
-
-fig.update_layout(
-    xaxis_rangeslider_visible=False,
-    height=550,
-    margin=dict(l=10, r=10, t=10, b=10),
-)
-st.plotly_chart(fig, use_container_width=True)
-
-# 10. Action Buttons
-st.subheader("Quick Orders")
-col_buy, col_sell = st.columns(2)
-with col_buy:
-  if st.button("BUY ORDER", use_container_width=True):
-    st.success(
-        f"Order Placed! [Price: ₹{current_price} | SL: ₹{sl} | TGT: ₹{target}]"
-    )
-with col_sell:
-  if st.button("SELL ORDER", use_container_width=True):
-    st.warning(f"Order Placed! [Price: ₹{current_price} | SL: ₹{sl}]")
+# ========================================================
+# 4. FIXED BOTTOM NAVIGATION BAR
+# ========================================================
+st.markdown("""
+<div class="bottom-nav">
+    <div class="nav-item"><div class="nav-icon">🏠</div>HOME</div>
+    <div class="nav-item"><div class="nav-icon">⭐</div>WATCHLIST</div>
+    <div class="nav-item nav-active"><div class="nav-icon">📁</div>PORTFOLIO</div>
+    <div class="nav-item"><div class="nav-icon">📑</div>ORDERS</div>
+    <div class="nav-item"><div class="nav-icon">👤</div>ACCOUNT</div>
+</div>
+""", unsafe_allow_html=True)
