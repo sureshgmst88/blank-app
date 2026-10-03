@@ -5,50 +5,36 @@ import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-# Page Configuration
-st.set_page_config(page_title="Angel One Live Pro Terminal", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Angel One Pro Live Terminal", layout="wide", initial_sidebar_state="collapsed")
 
-# Precise Angel One Styling
+# Precise CSS Styling for Mobile Trading
 st.markdown("""
 <style>
     .stApp {
         background-color: #ffffff !important;
-        color: #1e293b !important;
+        color: #111827 !important;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
     header, footer { visibility: hidden; }
-    .block-container { padding: 0.2rem 0.5rem 6.5rem 0.5rem; }
+    .block-container { padding: 0.2rem 0.4rem 5.5rem 0.4rem; }
 
-    /* Top Watchlist Ticker Tabs */
+    /* Top Watchlist Bar */
     .ticker-bar {
         display: flex;
         overflow-x: auto;
-        gap: 8px;
+        gap: 6px;
         background: #f8fafc;
-        padding: 6px;
+        padding: 5px 8px;
         border-bottom: 1px solid #e2e8f0;
         white-space: nowrap;
     }
     .ticker-pill {
         border: 1px solid #cbd5e1;
-        padding: 4px 10px;
+        padding: 3px 8px;
         border-radius: 4px;
-        font-size: 12px;
+        font-size: 11px;
         font-weight: 600;
         background: #ffffff;
-    }
-
-    /* Bottom Order & Position Panel */
-    .order-dock {
-        position: fixed;
-        bottom: 45px;
-        left: 0;
-        width: 100%;
-        background-color: #ffffff;
-        border-top: 1px solid #cbd5e1;
-        box-shadow: 0 -4px 12px rgba(0,0,0,0.08);
-        padding: 8px 12px;
-        z-index: 999;
     }
 
     /* Fixed Bottom Green Total Bar */
@@ -62,27 +48,11 @@ st.markdown("""
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 8px 16px;
+        padding: 6px 14px;
         font-weight: bold;
         color: #00875a;
-        font-size: 15px;
+        font-size: 14px;
         z-index: 1000;
-    }
-
-    /* Buttons */
-    div.buy-btn > button {
-        background-color: #00875a !important;
-        color: #ffffff !important;
-        font-weight: bold !important;
-        border-radius: 6px !important;
-        width: 100% !important;
-    }
-    div.sell-btn > button {
-        background-color: #de350b !important;
-        color: #ffffff !important;
-        font-weight: bold !important;
-        border-radius: 6px !important;
-        width: 100% !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -92,7 +62,6 @@ if 'active_order' not in st.session_state:
     st.session_state.active_order = {
         'sym': 'TEJASNET.NS',
         'display': 'TEJASNET',
-        'type': 'BUY INT',
         'qty': 1000,
         'buy_price': 480.00,
         'target': 505.00,
@@ -100,44 +69,76 @@ if 'active_order' not in st.session_state:
         'status': 'OPEN'
     }
 
-if 'dock_tab' not in st.session_state:
-    st.session_state.dock_tab = 'Positions'
-
-# Top Watchlist Bar
-st.markdown("""
-<div class="ticker-bar">
-    <span class="ticker-pill" style="border-color:#3b82f6; color:#00875a;">TEJASNET 497.00 (+0.50%) ✕</span>
-    <span class="ticker-pill" style="color:#de350b;">BLS 280.15 ✕</span>
-    <span class="ticker-pill" style="color:#de350b;">INDIGO 4,282.50 ✕</span>
-    <span class="ticker-pill">GOLDBEES ✕</span>
-</div>
-""", unsafe_allow_html=True)
+if 'timeframe' not in st.session_state:
+    st.session_state.timeframe = '15m'
 
 order = st.session_state.active_order
 
-@st.cache_data(ttl=30)
-def get_stock_candles(symbol):
+# 1. Top Ticker Watchlist Bar
+st.markdown("""
+<div class="ticker-bar">
+    <span class="ticker-pill" style="border-color:#3b82f6; color:#00875a;">TEJASNET ✕</span>
+    <span class="ticker-pill" style="color:#de350b;">BLS 280.15 ✕</span>
+    <span class="ticker-pill" style="color:#de350b;">INDIGO 4,282.50 ✕</span>
+    <span class="ticker-pill">ITC ✕</span>
+</div>
+""", unsafe_allow_html=True)
+
+# 2. Timeframe Selection Bar (Angel One Style)
+col_sym, col_tf_bar = st.columns([1.2, 3.8])
+with col_sym:
+    stock_sym = st.selectbox("Stock", ["TEJASNET.NS", "ITC.NS", "BLS.NS", "DRREDDY.NS"], index=0, label_visibility="collapsed")
+    order['sym'] = stock_sym
+    order['display'] = stock_sym.replace(".NS", "")
+
+with col_tf_bar:
+    tf = st.radio("TF", ["1m", "5m", "15m", "1h", "1D", "1W", "1M"], horizontal=True, index=2, label_visibility="collapsed")
+    st.session_state.timeframe = tf
+
+# Data Fetching Map
+tf_map = {
+    "1m": ("1d", "1m"),
+    "5m": ("5d", "5m"),
+    "15m": ("1mo", "15m"),
+    "1h": ("1mo", "60m"),
+    "1D": ("1y", "1d"),
+    "1W": ("2y", "1wk"),
+    "1M": ("5y", "1mo")
+}
+prd, itv = tf_map[tf]
+
+@st.cache_data(ttl=60)
+def fetch_candles(sym, p, i):
     try:
-        df = yf.download(symbol, period="1d", interval="1m", progress=False)
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
-        return df.dropna()
-    except:
+        data = yf.download(sym, period=p, interval=i, progress=False)
+        if isinstance(data.columns, pd.MultiIndex):
+            data.columns = data.columns.get_level_values(0)
+        return data.dropna()
+    except Exception:
         return pd.DataFrame()
 
-df = get_stock_candles(order['sym'])
-if df.empty or len(df) < 20:
-    idx = pd.date_range(end=pd.Timestamp.now(), periods=60, freq='1min')
-    prices = np.cumsum(np.random.randn(60) * 0.4) + 490.0
+df = fetch_candles(order['sym'], prd, itv)
+
+# Fallback with realistic variations if off-market / closed
+if df.empty or len(df) < 15:
+    np.random.seed(42)
+    n_points = 50
+    idx = pd.date_range(end=pd.Timestamp.now(), periods=n_points, freq='15min')
+    returns = np.random.normal(0.0005, 0.008, n_points)
+    price_seq = 480.0 * np.cumprod(1 + returns)
     df = pd.DataFrame({
-        'Open': prices - 0.2, 'High': prices + 0.8,
-        'Low': prices - 0.5, 'Close': prices,
-        'Volume': np.random.randint(1000, 50000, 60)
+        'Open': price_seq,
+        'High': price_seq * (1 + np.abs(np.random.normal(0, 0.006, n_points))),
+        'Low': price_seq * (1 - np.abs(np.random.normal(0, 0.006, n_points))),
+        'Close': price_seq * (1 + np.random.normal(0, 0.004, n_points)),
+        'Volume': np.random.randint(5000, 80000, n_points)
     }, index=idx)
+    df['High'] = np.maximum(df['High'], np.maximum(df['Open'], df['Close']))
+    df['Low'] = np.minimum(df['Low'], np.minimum(df['Open'], df['Close']))
 
 curr_ltp = float(df['Close'].iloc[-1])
 
-# SuperTrend (10, 3) Calculation
+# SuperTrend (10, 3)
 df['TR'] = np.maximum((df['High'] - df['Low']), np.maximum(abs(df['High'] - df['Close'].shift(1)), abs(df['Low'] - df['Close'].shift(1))))
 df['ATR'] = df['TR'].rolling(10).mean().bfill()
 df['Basic_UB'] = (df['High'] + df['Low']) / 2 + (3 * df['ATR'])
@@ -165,7 +166,7 @@ st_color = '#00875a' if is_bullish else '#de350b'
 st_text = "BULLISH (GREEN) 🟢" if is_bullish else "BEARISH (RED) 🔴"
 current_st_val = round(df['SuperTrend'].iloc[-1], 2)
 
-# Indicators: RSI, MACD, ADX
+# RSI
 delta = df['Close'].diff()
 gain = (delta.where(delta > 0, 0)).rolling(14).mean()
 loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
@@ -173,43 +174,45 @@ rs = gain / (loss + 1e-9)
 df['RSI'] = 100 - (100 / (1 + rs))
 rsi_now = float(df['RSI'].iloc[-1])
 
+# MACD
 df['MACD'] = df['Close'].ewm(span=12).mean() - df['Close'].ewm(span=26).mean()
 df['Signal'] = df['MACD'].ewm(span=9).mean()
 df['Hist'] = df['MACD'] - df['Signal']
-adx_val = 39.97
 
 # PnL Check
-if order['status'] == 'OPEN':
-    pnl_value = (curr_ltp - order['buy_price']) * order['qty']
-    pnl_pct = ((curr_ltp - order['buy_price']) / order['buy_price']) * 100
-else:
-    pnl_value = (order['target'] - order['buy_price']) * order['qty']
-    pnl_pct = ((order['target'] - order['buy_price']) / order['buy_price']) * 100
-
+pnl_value = (curr_ltp - order['buy_price']) * order['qty']
+pnl_pct = ((curr_ltp - order['buy_price']) / order['buy_price']) * 100
 pnl_color = "#00875a" if pnl_value >= 0 else "#de350b"
 pnl_sign = "+" if pnl_value >= 0 else ""
 
-# Header Info Strip with SuperTrend Indicator Status
+# Header Info Strip
 st.markdown(f"""
-<div style="display:flex; justify-content:space-between; align-items:center; padding: 4px 6px; font-size:13px; border-bottom:1px solid #e2e8f0; margin-bottom:4px;">
+<div style="display:flex; justify-content:space-between; align-items:center; padding: 4px 6px; font-size:12px; border-bottom:1px solid #e2e8f0; margin-bottom:2px;">
     <div><b>{order['display']}</b> <span style="color:#00875a; font-weight:bold;">₹{curr_ltp:.2f}</span></div>
-    <div><b>SuperTrend (10,3):</b> <span style="background:{'#e6f7f2' if is_bullish else '#ffebe6'}; color:{st_color}; padding:2px 8px; border-radius:4px; font-weight:bold;">{st_text}</span></div>
-    <div><b>RSI:</b> <span style="font-weight:bold; color:{'#de350b' if rsi_now>70 else ('#00875a' if rsi_now<30 else '#ff8b00')};">{rsi_now:.1f}</span></div>
+    <div><b>SuperTrend:</b> <span style="color:{st_color}; font-weight:bold;">{st_text}</span></div>
+    <div><b>RSI (14):</b> <span style="font-weight:bold; color:{'#de350b' if rsi_now>70 else ('#00875a' if rsi_now<30 else '#ff8b00')};">{rsi_now:.1f}</span></div>
 </div>
 """, unsafe_allow_html=True)
 
-# 4-ROW SUBPLOT: Candlestick + SuperTrend, Volume, MACD, RSI/ADX
+# 3-ROW SUBPLOT: Solid Bold Candlesticks + Volume + MACD
 fig = make_subplots(
-    rows=4, cols=1,
+    rows=3, cols=1,
     shared_xaxes=True,
     vertical_spacing=0.02,
-    row_heights=[0.60, 0.12, 0.14, 0.14]
+    row_heights=[0.70, 0.15, 0.15]
 )
 
-# 1. Candlestick
+# 1. Solid Clear Bold Candlesticks
 fig.add_trace(go.Candlestick(
-    x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'],
-    name="Candles", increasing_line_color='#00875a', decreasing_line_color='#de350b'
+    x=df.index,
+    open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'],
+    name="Candles",
+    increasing_line_color='#00875a',
+    increasing_fillcolor='#00875a',
+    decreasing_line_color='#de350b',
+    decreasing_fillcolor='#de350b',
+    increasing_line_width=1.5,
+    decreasing_line_width=1.5
 ), row=1, col=1)
 
 # 2. SuperTrend Step Line
@@ -218,76 +221,52 @@ fig.add_trace(go.Scatter(
     line=dict(color=st_color, width=2.5), name="SuperTrend"
 ), row=1, col=1)
 
-# SuperTrend Value Badge on the Right Axis (Angel One Style)
+# SuperTrend Value Badge
 fig.add_hline(
-    y=current_st_val, line_color=st_color, line_width=1, line_dash="solid",
-    annotation_text=f"  SuperTrend  {current_st_val}  ",
+    y=current_st_val, line_color=st_color, line_width=1,
+    annotation_text=f"  SuperTrend {current_st_val}  ",
     annotation_position="right",
     annotation_bgcolor=st_color,
     annotation_font=dict(color="#ffffff", size=10, family="Arial"),
     row=1, col=1
 )
 
-# 3. Live Trades & In-Chart Order Execution Tags
+# Trade Lines
 if order['status'] == 'OPEN':
     fig.add_hline(
-        y=order['buy_price'], line_color="#00875a", line_width=1.2, line_dash="solid",
+        y=order['buy_price'], line_color="#00875a", line_width=1.2,
         annotation_text=f"  BUY INT | {order['qty']}  ✕  ",
-        annotation_position="right",
-        annotation_bgcolor="#ffffff",
-        annotation_bordercolor="#00875a",
-        annotation_font=dict(color="#00875a", size=11, family="Arial"),
+        annotation_position="right", annotation_bgcolor="#ffffff",
+        annotation_bordercolor="#00875a", annotation_font=dict(color="#00875a", size=10),
         row=1, col=1
     )
-
     fig.add_hline(
         y=curr_ltp, line_color="#00875a", line_width=1, line_dash="dot",
-        annotation_text=f"  {pnl_sign}₹{pnl_value:,.2f} | {order['qty']} ⇅ ✕  ",
-        annotation_position="right",
-        annotation_bgcolor="#e6f7f2",
-        annotation_bordercolor="#00875a",
-        annotation_font=dict(color="#00875a", size=12, family="Arial"),
+        annotation_text=f"  {pnl_sign}₹{pnl_value:,.2f} | {order['qty']} ⇅  ",
+        annotation_position="right", annotation_bgcolor="#e6f7f2",
+        annotation_bordercolor="#00875a", annotation_font=dict(color="#00875a", size=11, weight="bold"),
         row=1, col=1
     )
-
     fig.add_hline(
-        y=order['target'], line_color="#de350b", line_width=1.2, line_dash="solid",
-        annotation_text=f"  SELL INT (TARGET) | {order['qty']}  ✕  ",
-        annotation_position="right",
-        annotation_bgcolor="#ffebe6",
-        annotation_bordercolor="#de350b",
-        annotation_font=dict(color="#de350b", size=11, family="Arial"),
-        row=1, col=1
-    )
-else:
-    fig.add_annotation(
-        x=df.index[-1], y=curr_ltp,
-        text="🎉 TARGET ACHIEVED! ALL POSITIONS CLOSED",
-        showarrow=True, arrowhead=2, arrowcolor="#00875a",
-        bgcolor="#00875a", font=dict(color="#ffffff", size=12),
+        y=order['target'], line_color="#de350b", line_width=1.2,
+        annotation_text=f"  SELL TARGET | {order['qty']}  ✕  ",
+        annotation_position="right", annotation_bgcolor="#ffebe6",
+        annotation_bordercolor="#de350b", annotation_font=dict(color="#de350b", size=10),
         row=1, col=1
     )
 
-# Volume Subplot
-fig.add_trace(go.Bar(
-    x=df.index, y=df['Volume'],
-    marker_color=['#00875a' if c>=o else '#de350b' for c, o in zip(df['Close'], df['Open'])],
-    name="Volume"
-), row=2, col=1)
+# Volume Subplot (Red / Green Solid Bars)
+vol_colors = ['#00875a' if c >= o else '#de350b' for c, o in zip(df['Close'], df['Open'])]
+fig.add_trace(go.Bar(x=df.index, y=df['Volume'], marker_color=vol_colors, name="Volume"), row=2, col=1)
 
 # MACD Subplot
-fig.add_trace(go.Bar(x=df.index, y=df['Hist'], marker_color=['#00875a' if v>=0 else '#de350b' for v in df['Hist']], name="MACD Hist"), row=3, col=1)
+hist_colors = ['#00875a' if v >= 0 else '#de350b' for v in df['Hist']]
+fig.add_trace(go.Bar(x=df.index, y=df['Hist'], marker_color=hist_colors, name="Hist"), row=3, col=1)
 fig.add_trace(go.Scatter(x=df.index, y=df['MACD'], line=dict(color='#0052cc', width=1), name="MACD"), row=3, col=1)
 fig.add_trace(go.Scatter(x=df.index, y=df['Signal'], line=dict(color='#ff8b00', width=1), name="Signal"), row=3, col=1)
 
-# RSI & ADX Subplot
-fig.add_trace(go.Scatter(x=df.index, y=df['RSI'], line=dict(color='#7c3aed', width=1.5), name="RSI"), row=4, col=1)
-fig.add_trace(go.Scatter(x=df.index, y=[adx_val]*len(df), line=dict(color='#ffab00', width=1.2, dash='dot'), name="ADX"), row=4, col=1)
-fig.add_hline(y=70, line_color="#de350b", line_dash="dot", line_width=1, row=4, col=1)
-fig.add_hline(y=30, line_color="#00875a", line_dash="dot", line_width=1, row=4, col=1)
-
 fig.update_layout(
-    height=540,
+    height=460,
     margin=dict(l=5, r=105, t=10, b=10),
     xaxis_rangeslider_visible=False,
     plot_bgcolor="#ffffff",
@@ -299,78 +278,26 @@ fig.update_yaxes(showgrid=True, gridcolor="#f1f5f9", linecolor="#cbd5e1", side="
 
 st.plotly_chart(fig, use_container_width=True)
 
-# ==========================================
-# HALF-SCREEN DOCK (POSITIONS & ORDERS)
-# ==========================================
-st.markdown('<div class="order-dock">', unsafe_allow_html=True)
+# 3. Bottom Positions & Action Dock
+col_pos, col_act = st.columns([3, 2])
+with col_pos:
+    st.markdown(f"""
+    <div style="padding:4px 6px;">
+        <div style="font-weight:bold; font-size:13px;">{order['display']} <span style="background:#e6f7f2; color:#00875a; font-size:10px; padding:2px 4px; border-radius:3px;">BUY INT</span></div>
+        <div style="color:#64748b; font-size:11px;">{order['qty']} Shares • Avg ₹{order['buy_price']:.2f}</div>
+    </div>
+    """, unsafe_allow_html=True)
+with col_act:
+    st.markdown(f"""
+    <div style="text-align:right; font-weight:bold; font-size:14px; color:{pnl_color};">{pnl_sign}₹{pnl_value:,.2f}</div>
+    <div style="text-align:right; font-size:11px; color:{pnl_color};">({pnl_sign}{pnl_pct:.2f}%)</div>
+    """, unsafe_allow_html=True)
+    if st.button("⚡ ONE TAP EXIT"):
+        order['status'] = 'ACHIEVED'
+        st.toast("Position Exited Successfully!")
+        st.rerun()
 
-t1, t2, t3 = st.columns([1, 1, 1])
-with t1:
-    if st.button("Trade"):
-        st.session_state.dock_tab = 'Trade'
-with t2:
-    if st.button("Open Orders"):
-        st.session_state.dock_tab = 'Open Orders'
-with t3:
-    if st.button("Positions"):
-        st.session_state.dock_tab = 'Positions'
-
-if st.session_state.dock_tab == 'Positions':
-    if order['status'] == 'OPEN':
-        p_c1, p_c2 = st.columns([3, 2])
-        with p_c1:
-            st.markdown(f"""
-            <div style="font-weight:bold; font-size:14px;">{order['display']}</div>
-            <div style="color:#64748b; font-size:12px;">{order['qty']} Shares • Avg {order['buy_price']:.2f} <span style="background:#e6f7f2; color:#00875a; padding:1px 4px; border-radius:3px;">BUY INT</span></div>
-            """, unsafe_allow_html=True)
-        with p_c2:
-            st.markdown(f"""
-            <div style="text-align:right; font-weight:bold; font-size:15px; color:{pnl_color};">{pnl_sign}₹{pnl_value:,.2f}</div>
-            <div style="text-align:right; font-size:12px; color:{pnl_color};">LTP {curr_ltp:.2f} ({pnl_sign}{pnl_pct:.2f}%)</div>
-            """, unsafe_allow_html=True)
-            if st.button("⚡ ONE TAP EXIT", key="exit_btn"):
-                order['status'] = 'ACHIEVED'
-                st.rerun()
-    else:
-        st.info("✅ அனைத்து ஆர்டர்களும் டார்கெட்டை அடைந்துவிட்டன. (No Open Positions)")
-
-elif st.session_state.dock_tab == 'Open Orders':
-    if order['status'] == 'OPEN':
-        st.markdown(f"""
-        <div style="background:#f8fafc; padding:8px; border-radius:6px; border:1px solid #e2e8f0; font-size:13px;">
-            <div style="display:flex; justify-content:space-between;">
-                <b>{order['display']} (TARGET EXIT)</b>
-                <span style="color:#de350b; font-weight:bold;">LIMIT PENDING</span>
-            </div>
-            <div style="display:flex; justify-content:space-between; color:#64748b; font-size:12px; margin-top:4px;">
-                <span>Qty: {order['qty']} / {order['qty']}</span>
-                <span>Price: ₹{order['target']:.2f}</span>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-    else:
-        st.write("பெண்டிங் ஆர்டர்கள் எதுவும் இல்லை.")
-
-elif st.session_state.dock_tab == 'Trade':
-    b_col1, b_col2 = st.columns(2)
-    with b_col1:
-        st.markdown('<div class="buy-btn">', unsafe_allow_html=True)
-        if st.button(f"BUY @ ₹{curr_ltp:.2f}"):
-            order['status'] = 'OPEN'
-            order['buy_price'] = curr_ltp
-            order['target'] = round(curr_ltp + 15, 2)
-            st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
-    with b_col2:
-        st.markdown('<div class="sell-btn">', unsafe_allow_html=True)
-        if st.button(f"SELL @ ₹{curr_ltp:.2f}"):
-            order['status'] = 'ACHIEVED'
-            st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
-
-st.markdown('</div>', unsafe_allow_html=True)
-
-# FIXED GREEN TOTAL PROFIT BAR AT VERY BOTTOM
+# Fixed Green Bottom Bar
 st.markdown(f"""
 <div class="total-green-bar">
     <div>✔ Total P&L</div>
